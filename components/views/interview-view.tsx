@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef, useCallback } from "react"
 import { useApp } from "@/lib/store"
+import { textToSpeech, stopSpeech } from "@/lib/elevenLabsService"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
@@ -15,6 +16,7 @@ import {
   FileText,
   CheckCircle2,
   AlertCircle,
+  Volume2,
 } from "lucide-react"
 import { Spinner } from "@/components/ui/spinner"
 
@@ -93,6 +95,18 @@ export function InterviewView() {
       }
     }
   }, [messages, currentApplication, completeInterview])
+
+  // Trigger text-to-speech for assistant messages
+  useEffect(() => {
+    const lastMessage = messages[messages.length - 1]
+    if (lastMessage?.role === "assistant" && lastMessage.content.length > 0 && !isLoading) {
+      // Delay slightly to ensure the message is fully rendered
+      const timer = setTimeout(() => {
+        textToSpeech(lastMessage.content)
+      }, 300)
+      return () => clearTimeout(timer)
+    }
+  }, [messages, isLoading])
 
   // Send message to API
   const sendToAPI = useCallback(async (userText: string) => {
@@ -361,6 +375,15 @@ export function InterviewView() {
                   disabled={isLoading}
                   className="flex-1"
                 />
+                <Button 
+                  type="button" 
+                  variant="outline" 
+                  size="icon"
+                  onClick={stopSpeech}
+                  title="Stop audio playback"
+                >
+                  <Volume2 className="h-4 w-4" />
+                </Button>
                 <Button type="submit" disabled={isLoading || !input.trim()}>
                   <Send className="h-4 w-4" />
                 </Button>
