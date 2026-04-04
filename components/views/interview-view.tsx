@@ -9,6 +9,19 @@ import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
+import {
   Bot,
   User,
   Send,
@@ -19,6 +32,7 @@ import {
   Volume2,
   Camera,
   CameraOff,
+  ChevronDown,
 } from "lucide-react"
 import { Spinner } from "@/components/ui/spinner"
 
@@ -44,6 +58,8 @@ export function InterviewView() {
   const streamRef = useRef<MediaStream | null>(null)
   const [isCameraOn, setIsCameraOn] = useState(false)
   const [cameraError, setCameraError] = useState<string | null>(null)
+  const [cameraDevices, setCameraDevices] = useState<MediaDeviceInfo[]>([])
+  const [selectedDeviceId, setSelectedDeviceId] = useState<string>("")
 
   // Store context
   const contextRef = useRef({
@@ -57,13 +73,31 @@ export function InterviewView() {
   })
 
   // Webcam functions
+  const getCameraDevices = useCallback(async () => {
+    try {
+      const devices = await navigator.mediaDevices.enumerateDevices()
+      const videoDevices = devices.filter(device => device.kind === 'videoinput')
+      setCameraDevices(videoDevices)
+      if (videoDevices.length > 0 && !selectedDeviceId) {
+        setSelectedDeviceId(videoDevices[0].deviceId)
+      }
+    } catch (err) {
+      console.error("Error getting camera devices:", err)
+    }
+  }, [selectedDeviceId])
+
   const startCamera = useCallback(async () => {
     try {
       setCameraError(null)
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: { width: 320, height: 240 },
+      const constraints: MediaStreamConstraints = {
+        video: {
+          width: 320,
+          height: 240,
+          deviceId: selectedDeviceId ? { exact: selectedDeviceId } : undefined
+        },
         audio: false
-      })
+      }
+      const stream = await navigator.mediaDevices.getUserMedia(constraints)
       streamRef.current = stream
       if (videoRef.current) {
         videoRef.current.srcObject = stream
@@ -73,19 +107,42 @@ export function InterviewView() {
       console.error("Camera error:", err)
       setCameraError(err.message || "Failed to access camera")
     }
-  }, [])
+  }, [selectedDeviceId])
 
-  const stopCamera = useCallback(() => {
-    if (streamRef.current) {
-      streamRef.current.getTracks().forEach(track => track.stop())
-      streamRef.current = null
+  const switchCamera = useCallback(async (deviceId: string) => {
+    setSelectedDeviceId(deviceId)
+    if (isCameraOn) {
+      // Stop current stream and restart with new device
+      stopCamera()
+      setTimeout(() => {
+        const constraints: MediaStreamConstraints = {
+          video: {
+            width: 320,
+            height: 240,
+            deviceId: { exact: deviceId }
+          },
+          audio: false
+        }
+        navigator.mediaDevices.getUserMedia(constraints)
+          .then(stream => {
+            streamRef.current = stream
+            if (videoRef.current) {
+              videoRef.current.srcObject = stream
+            }
+            setIsCameraOn(true)
+          })
+          .catch(err => {
+            console.error("Error switching camera:", err)
+            setCameraError("Failed to switch camera")
+          })
+      }, 100)
     }
-    if (videoRef.current) {
-      videoRef.current.srcObject = null
-    }
-    setIsCameraOn(false)
-    setCameraError(null)
-  }, [])
+  }, [isCameraOn, stopCamera])
+
+  // Get camera devices on mount
+  useEffect(() => {
+    getCameraDevices()
+  }, [getCameraDevices])
 
   // Cleanup camera on unmount
   useEffect(() => {
@@ -285,12 +342,32 @@ export function InterviewView() {
             </p>
           </div>
           {/* Mobile Camera Button */}
-          <div className="lg:hidden">
+          <div className="lg:hidden flex items-center gap-2">
+            {cameraDevices.length > 1 && (
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="outline" size="sm" className="px-2">
+                    <ChevronDown className="h-3 w-3" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  {cameraDevices.map((device) => (
+                    <DropdownMenuItem
+                      key={device.deviceId}
+                      onClick={() => switchCamera(device.deviceId)}
+                      className="text-xs"
+                    >
+                      {device.label || `Camera ${cameraDevices.indexOf(device) + 1}`}
+                    </DropdownMenuItem>
+                  ))}
+                </DropdownMenuContent>
+              </DropdownMenu>
+            )}
             <Button
               variant="outline"
               size="sm"
               onClick={isCameraOn ? stopCamera : startCamera}
-              className={`ml-4 ${isCameraOn ? 'bg-red-500/10 border-red-500/30' : ''}`}
+              className={`${isCameraOn ? 'bg-red-500/10 border-red-500/30' : ''}`}
             >
               {isCameraOn ? (
                 <CameraOff className="h-4 w-4" />
@@ -328,6 +405,22 @@ export function InterviewView() {
               </div>
             </CardHeader>
             <CardContent>
+              {cameraDevices.length > 1 && (
+                <div className="mb-3">
+                  <Select value={selectedDeviceId} onValueChange={switchCamera}>
+                    <SelectTrigger className="w-full h-8 text-xs">
+                      <SelectValue placeholder="Select camera" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {cameraDevices.map((device) => (
+                        <SelectItem key={device.deviceId} value={device.deviceId} className="text-xs">
+                          {device.label || `Camera ${cameraDevices.indexOf(device) + 1}`}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
               <div className="aspect-video bg-muted rounded-lg overflow-hidden mb-2">
                 <video
                   ref={videoRef}
@@ -350,6 +443,7 @@ export function InterviewView() {
               )}
               <p className="text-xs text-muted-foreground">
                 {isCameraOn ? "Camera is active" : "Click the camera button to start your video feed"}
+                {cameraDevices.length > 1 && " • Select camera device above"}
               </p>
             </CardContent>
           </Card>
