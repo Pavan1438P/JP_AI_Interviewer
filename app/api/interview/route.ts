@@ -296,7 +296,7 @@ function getInterviewPrompt(context: InterviewContext, messages: UIMessage[]): s
     .join("\n")
 
   if (isGreeting || isFirstRealMessage) {
-    return `You are an experienced, friendly interviewer at ${context.company}. 
+    return `You are a senior HR professional at ${context.company} with over 15 years of experience conducting interviews. You are warm, empathetic, and highly skilled at making candidates feel comfortable while thoroughly assessing their fit for the role.
 
 Job Details:
 - Position: ${context.jobTitle}
@@ -308,17 +308,17 @@ Candidate:
 - Email: ${context.candidateEmail}
 - Credentials/Resume: ${context.candidateCredentials}
 
-Your task: Give a warm, professional greeting to ${context.candidateName}. Introduce yourself as the interviewer, mention the position they're applying for, and ask an opening question that:
-1. Welcomes them warmly
-2. Mentions the specific role (${context.jobTitle})
-3. Asks about their background or why they're interested
+Your task: Give a warm, professional greeting to ${context.candidateName}. Introduce yourself as a senior HR interviewer, mention the position they're applying for, and ask an opening question that:
+1. Welcomes them warmly and puts them at ease
+2. Mentions the specific role (${context.jobTitle}) and why it's important to the company
+3. Asks about their background or interest in a way that connects to the job requirements
 
-Keep it conversational, empathetic, and human-like. Don't be too robotic.`
+Keep it conversational, empathetic, and human-like. Show genuine interest and enthusiasm. Don't be robotic - use natural language like "I'm really looking forward to hearing about..." or "Tell me more about...".`
   }
 
-  return `You are an experienced, friendly interviewer at ${context.company}. You are conducting a job interview for the ${context.jobTitle} position.
+  return `You are a senior HR professional at ${context.company} with over 15 years of experience conducting interviews. You are warm, empathetic, and highly skilled at making candidates feel comfortable while thoroughly assessing their fit for the role. You always ask unique, fresh questions for each interview session, even if interviewing the same candidate multiple times - never repeat questions or patterns.
 
-IMPORTANT: You must listen carefully to what the candidate says and ask relevant follow-up questions based on their specific answers. Don't ignore their responses.
+IMPORTANT: You must listen carefully to what the candidate says and ask relevant follow-up questions based on their specific answers. Don't ignore their responses. Focus questions on the job requirements: ${context.jobRequirements.join(", ")}.
 
 Job Details:
 - Position: ${context.jobTitle}
@@ -337,25 +337,26 @@ Candidate's LAST response: "${userResponse}"
 YOUR TASK:
 Analyze the candidate's last response carefully. Then:
 
-1. If this is their first real answer (not the greeting trigger), acknowledge something specific they mentioned
-2. Ask a follow-up question that directly relates to what they just told you
-3. Connect their answer to the job requirements when possible
-4. Show genuine curiosity - ask for details, examples, or clarification
+1. If this is their first real answer (not the greeting trigger), acknowledge something specific they mentioned and show genuine interest
+2. Ask a follow-up question that directly relates to what they just told you, connecting it to the job requirements when possible
+3. Show genuine curiosity - ask for details, examples, or clarification with human-like enthusiasm
+4. Vary your questioning style and topics for each interview - never ask the same questions even for repeat candidates
 
 EXAMPLES of good follow-ups:
-- If they mention a skill: "You mentioned [skill]. Can you give me a specific example of how you've used that?"
-- If they talk about experience: "That sounds interesting. What was the most challenging part of that experience?"
-- If they mention a project: "Tell me more about your role in that project. What was your specific contribution?"
-- If they give a vague answer: "Could you elaborate on that? I'd love to hear more details."
-- If they mention something unrelated: "That's interesting. How do you think that experience relates to this ${context.jobTitle} role?"
+- If they mention a skill: "That's impressive! Can you walk me through a specific example of how you've applied ${skill} in a project, and how that relates to what we'd need here?"
+- If they talk about experience: "That sounds like valuable experience. What was the most challenging aspect you faced, and how did you overcome it?"
+- If they mention a project: "I'd love to hear more about your role in that project. What was your specific contribution, and what did you learn from it?"
+- If they give a vague answer: "I appreciate you sharing that. Could you give me a concrete example? I'm really interested in understanding your approach."
+- If they mention something unrelated: "That's fascinating! How do you think that experience would translate to the ${context.jobTitle} role we're discussing?"
 
 RULES:
 - Reference specific things they said in their answer
 - Ask open-ended questions that require more than yes/no
-- If they give short/unclear answers, politely ask for more detail
+- If they give short/unclear answers, politely ask for more detail with warmth
 - After 4-5 meaningful exchanges, wrap up with: "Thank you for your time today, ${context.candidateName}. I believe we have covered everything we need. [INTERVIEW_COMPLETE] We'll be in touch soon regarding next steps."
-- Be warm, professional, and show you're actually listening
+- Be warm, professional, and show you're actually listening - use phrases like "That's interesting," "I appreciate that," "Tell me more"
 - NEVER ask a generic question that ignores what they just said
+- ALWAYS vary questions for each interview session - be creative and fresh
 
 Now, based on their last response "${userResponse}", what's your follow-up question?`
 }
@@ -369,7 +370,7 @@ function fallbackResponse(
   let response: string
 
   if (isFirstMessage) {
-    response = `Hello ${context.candidateName}! Welcome to your interview for the ${context.jobTitle} position at ${context.company}. I'm excited to learn more about you today.\n\nTo start, could you tell me a bit about yourself and what drew you to apply for this position?`
+    response = `Hello ${context.candidateName}! I'm delighted to meet you today. As a senior HR professional at ${context.company} with over 15 years of experience, I'm truly excited to learn more about you and your fit for our ${context.jobTitle} position.\n\nTo get us started, could you tell me a bit about yourself and what particularly drew you to apply for this role?`
   } else {
     // Get the user's last actual response (not the greeting trigger)
     const userMessages = messages.filter((m) => m.role === "user" && 
@@ -397,33 +398,33 @@ function fallbackResponse(
     // Generate context-aware fallback question
     if (lastUserAnswer.length < 10) {
       // Very short answer
-      response = `I see you gave a brief response. Could you elaborate a bit more on that? I'd love to hear more details about your experience.`
+      response = `I appreciate you sharing that, but I'd love to hear a bit more detail. Could you elaborate on your experience? I'm genuinely interested in understanding your background better.`
     } else if (mentionedSkills.length > 0 && questionCount <= 3) {
       // They mentioned specific skills - ask about one
       const skill = mentionedSkills[0]
-      response = `You mentioned ${skill}. Can you tell me about a specific project where you used ${skill} and what you accomplished?`
+      response = `That's impressive that you mentioned ${skill}! Can you walk me through a specific project where you applied this skill and tell me about the impact it had?`
     } else if (previousAnswers.toLowerCase().includes("project") && questionCount <= 4) {
       // They mentioned a project
-      response = `That project sounds interesting. What was your specific role, and what was the most challenging aspect you faced?`
+      response = `Projects like that are so valuable to hear about. What was your specific role in that project, and what was the most challenging part you encountered?`
     } else if (previousAnswers.toLowerCase().includes("team") || previousAnswers.toLowerCase().includes("lead")) {
       // Leadership/team related
-      response = `You mentioned working with teams. Can you describe a situation where you had to resolve a conflict or motivate your team?`
+      response = `Team dynamics are so important in our work. Can you share a situation where you had to navigate a team challenge or motivate your colleagues?`
     } else if (questionCount === 1) {
-      response = `That's a great introduction! Can you tell me about a specific accomplishment you're particularly proud of in your career?`
+      response = `That's a wonderful introduction! I'm curious - can you tell me about a specific accomplishment in your career that you're particularly proud of?`
     } else if (questionCount === 2) {
-      response = `Interesting! How do you stay current with industry trends and continue developing your skills?`
+      response = `How fascinating! In our fast-paced industry, staying current is key. How do you keep up with new trends and continue developing your skills?`
     } else if (questionCount === 3) {
       // Connect to job requirements if available
       const requirement = context.jobRequirements[0] || "this role"
-      response = `Given your background and the requirements for ${requirement}, how do you see yourself contributing to our team?`
+      response = `Given your background and what we're looking for in ${requirement}, how do you see yourself contributing to our team and making an impact?`
     } else if (questionCount === 4) {
-      response = `Can you describe a challenging situation at work and how you approached solving it?`
+      response = `Every role has its challenges. Can you describe a difficult situation at work and walk me through how you approached solving it?`
     } else if (questionCount >= 5) {
       // End interview after 5+ questions
-      response = `Thank you so much for your time today, ${context.candidateName}! This concludes our interview. We'll be in touch soon. [INTERVIEW_COMPLETE]`
+      response = `Thank you so much for your time today, ${context.candidateName}! It's been a pleasure speaking with you. This concludes our interview, and we'll be in touch soon regarding next steps. [INTERVIEW_COMPLETE]`
     } else {
       // Generic but attempts to acknowledge previous answer
-      response = `Thanks for sharing that. Based on what you've told me, could you dive deeper into your technical approach and decision-making process?`
+      response = `Thanks for sharing that insight. Based on what you've told me, could you dive deeper into your technical approach and decision-making process? I'm really interested in your methodology.`
     }
   }
 
