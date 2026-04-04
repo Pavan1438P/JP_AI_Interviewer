@@ -24,7 +24,7 @@ export function Header() {
         <div className="flex items-center gap-2">
           <button
             onClick={() => setCurrentView("home")}
-            className="flex items-center gap-2 text-xl font-bold bg-gradient-to-r from-primary to-secondary bg-clip-text text-transparent"
+            className="flex items-center gap-2 text-[36px] font-bold bg-gradient-to-r from-primary to-secondary bg-clip-text text-transparent"
           >
             Haveloc
           </button>
