@@ -1,18 +1,17 @@
 /**
  * ElevenLabs Text-to-Speech Service
  * Converts interview responses to natural-sounding speech using ElevenLabs API
+ * Calls secure backend API route to avoid CORS and keep API key private
  */
 
 interface TextToSpeechOptions {
   voiceId?: string
-  stability?: number
-  similarityBoost?: number
 }
 
 /**
  * Convert text to speech using ElevenLabs API and play it automatically
  * @param text - The text to convert to speech
- * @param options - Optional configuration for voice and audio parameters
+ * @param options - Optional configuration for voice
  * @returns Promise that resolves when audio playback is triggered
  */
 export async function textToSpeech(
@@ -21,16 +20,7 @@ export async function textToSpeech(
 ): Promise<void> {
   const {
     voiceId = "21m00Tcm4TlvDq8ikWAM", // Rachel - professional, friendly voice
-    stability = 0.5,
-    similarityBoost = 0.75,
   } = options
-
-  const apiKey = process.env.NEXT_PUBLIC_ELEVENLABS_API_KEY
-
-  if (!apiKey) {
-    console.warn("ElevenLabs API key not configured. Speech synthesis disabled.")
-    return
-  }
 
   try {
     // Validate input
@@ -54,32 +44,23 @@ export async function textToSpeech(
 
     console.log("Generating speech for:", cleanText.substring(0, 100) + "...")
 
-    const response = await fetch(
-      `https://api.elevenlabs.io/v1/text-to-speech/${voiceId}`,
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "xi-api-key": apiKey,
-        },
-        body: JSON.stringify({
-          text: cleanText,
-          model_id: "eleven_monolingual_v1",
-          voice_settings: {
-            stability,
-            similarity_boost: similarityBoost,
-          },
-        }),
-      }
-    )
+    // Call our secure backend API route
+    const response = await fetch("/api/text-to-speech", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        text: cleanText,
+        voiceId,
+      }),
+    })
 
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({ error: "Unknown error" }))
       throw new Error(
-        `ElevenLabs API error: ${response.status} - ${
-          errorData.detail?.message ||
-          errorData.error ||
-          "Failed to generate speech"
+        `Text-to-speech error: ${response.status} - ${
+          errorData.error || "Failed to generate speech"
         }`
       )
     }
@@ -92,7 +73,9 @@ export async function textToSpeech(
 
     // Create and play audio
     const audio = new Audio(audioUrl)
-    audio.play()
+    audio.play().catch((err) => {
+      console.error("Audio playback error:", err)
+    })
 
     // Clean up the object URL when the audio finishes
     audio.addEventListener("ended", () => {
