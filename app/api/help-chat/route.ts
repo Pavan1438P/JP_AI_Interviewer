@@ -11,7 +11,7 @@ const MAX_BODY_SIZE = 10 * 1024
 // Demo responses for help center
 const demoResponses: Record<string, string> = {
   apply:
-    "To apply for a job on Haveloc:\n\n1. Browse the job listings on the home page\n2. Click the \"Apply\" button on any job that interests you\n3. Fill in your credentials and upload your resume (optional)\n4. Schedule your interview date and time\n5. Submit your application!\n\nOnce submitted, you can find your application in \"Applied Interviews\" from the menu.",
+    "To apply for a job on Haveloc:\n\n1. Browse the job listings on the home page\n2. Click the \"Apply\" button on any job that interests you\n3. Fill in your credentials and upload your resume\n4. Schedule your interview date and time\n5. Submit your application!\n\nOnce submitted, you can find your application in \"Applied Interviews\" from the menu.",
   interview:
     "The Haveloc interview process is simple:\n\n1. After applying, go to \"Applied Interviews\" from the menu\n2. Click \"Take Interview\" when you're ready\n3. Our AI interviewer will ask you questions based on:\n   - The job requirements\n   - Your profile and experience\n   - Your previous answers\n4. Answer naturally and professionally\n5. The interview concludes with a thank you message\n\nGood luck!",
   profile:

@@ -41,8 +41,8 @@ Education: ${user.education}`
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
-    if (!credentials || !scheduledDate || !scheduledTime) {
-      alert("Please fill in all required fields")
+    if (!credentials || !scheduledDate || !scheduledTime || !resume) {
+      alert("Please fill in all required fields, including your resume.")
       return
     }
     submitApplication({
@@ -138,8 +138,11 @@ Education: ${user.education}`
               <Field>
                 <FieldLabel className="flex items-center gap-2">
                   <Upload className="h-4 w-4" />
-                  Upload Resume/CV (PDF)
+                  Upload Resume/CV (PDF) *
                 </FieldLabel>
+                <p className="text-sm text-muted-foreground mb-2">
+                  Resume upload is required to submit your application, but it will not be used during AI evaluation.
+                </p>
                 <div className="flex items-center gap-4">
                   <Input
                     type="file"
@@ -204,7 +207,11 @@ Education: ${user.education}`
               >
                 Cancel
               </Button>
-              <Button type="submit" className="flex-1 bg-primary hover:bg-primary/90">
+              <Button
+                type="submit"
+                className="flex-1 bg-primary hover:bg-primary/90"
+                disabled={!resume}
+              >
                 Submit Application
               </Button>
             </div>
