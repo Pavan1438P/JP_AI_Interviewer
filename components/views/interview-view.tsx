@@ -32,6 +32,8 @@ import {
   Volume2,
   Camera,
   CameraOff,
+  Mic,
+  MicOff,
   ChevronDown,
 } from "lucide-react"
 import { Spinner } from "@/components/ui/spinner"
@@ -60,6 +62,14 @@ export function InterviewView() {
   const [cameraError, setCameraError] = useState<string | null>(null)
   const [cameraDevices, setCameraDevices] = useState<MediaDeviceInfo[]>([])
   const [selectedDeviceId, setSelectedDeviceId] = useState<string>("")
+  const [isRecording, setIsRecording] = useState(false)
+  const [voiceSupported, setVoiceSupported] = useState(true)
+  const [voiceError, setVoiceError] = useState<string | null>(null)
+  const recognitionRef = useRef<any>(null)
+  const isRecordingRef = useRef(false)
+  const retryCountRef = useRef(0)
+  const isStartingRef = useRef(false)
+  const maxRetries = 3
 
   // Store context
   const contextRef = useRef({
@@ -86,14 +96,153 @@ export function InterviewView() {
     }
   }, [selectedDeviceId])
 
-  const startCamera = useCallback(async () => {
+  useEffect(() => {
+    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition
+    if (!SpeechRecognition) {
+      setVoiceSupported(false)
+      return
+    }
+
+    setVoiceSupported(true)
+    const recognition = new SpeechRecognition()
+    recognition.continuous = true
+    recognition.interimResults = true
+    recognition.lang = "en-US"
+
+    recognition.onresult = (event: any) => {
+      let finalTranscript = ""
+      for (let i = event.resultIndex; i < event.results.length; i++) {
+        const result = event.results[i]
+        if (result.isFinal) {
+          finalTranscript += result[0].transcript
+        }
+      }
+      if (finalTranscript.trim()) {
+        setInput(prev => prev ? `${prev} ${finalTranscript.trim()}` : finalTranscript.trim())
+        // Reset retry count on successful transcription
+        retryCountRef.current = 0
+        setVoiceError(null)
+      }
+    }
+
+    recognition.onerror = (event: any) => {
+      console.warn("Speech recognition error:", event.error)
+
+      // Handle different error types appropriately
+      switch (event.error) {
+        case 'network':
+        case 'service-not-allowed':
+          // These are more serious errors, stop recording
+          setVoiceError("Voice input unavailable. Please check your microphone permissions.")
+          setIsRecording(false)
+          isRecordingRef.current = false
+          break
+        case 'not-allowed':
+          setVoiceError("Microphone access denied. Please allow microphone access and try again.")
+          setIsRecording(false)
+          isRecordingRef.current = false
+          break
+        case 'no-speech':
+          // No speech detected, this is normal - continue listening
+          if (isRecordingRef.current && retryCountRef.current < maxRetries) {
+            retryCountRef.current++
+            console.log(`No speech detected, retry ${retryCountRef.current}/${maxRetries}`)
+            setTimeout(() => {
+              if (isRecordingRef.current) {
+                try {
+                  recognitionRef.current.start()
+                } catch (e) {
+                  console.warn("Failed to restart recognition:", e)
+                }
+              }
+            }, 1000)
+          } else {
+            setVoiceError("No speech detected. Please speak clearly and try again.")
+            setIsRecording(false)
+            isRecordingRef.current = false
+            retryCountRef.current = 0
+          }
+          break
+        case 'audio-capture':
+          // Audio capture issues, try to restart
+          if (isRecordingRef.current && retryCountRef.current < maxRetries) {
+            retryCountRef.current++
+            console.log(`Audio capture error, retry ${retryCountRef.current}/${maxRetries}`)
+            setTimeout(() => {
+              if (isRecordingRef.current) {
+                try {
+                  recognitionRef.current.start()
+                } catch (e) {
+                  console.warn("Failed to restart recognition:", e)
+                }
+              }
+            }, 500)
+          } else {
+            setVoiceError("Audio capture failed. Please check your microphone.")
+            setIsRecording(false)
+            isRecordingRef.current = false
+            retryCountRef.current = 0
+          }
+          break
+        default:
+          // For other errors, try to continue if within retry limit
+          if (isRecordingRef.current && retryCountRef.current < maxRetries) {
+            retryCountRef.current++
+            console.log(`Speech recognition error (${event.error}), retry ${retryCountRef.current}/${maxRetries}`)
+            setTimeout(() => {
+              if (isRecordingRef.current) {
+                try {
+                  recognitionRef.current.start()
+                } catch (e) {
+                  console.warn("Failed to restart recognition:", e)
+                }
+              }
+            }, 1000)
+          } else {
+            setVoiceError(`Voice input error: ${event.error}`)
+            setIsRecording(false)
+            isRecordingRef.current = false
+            retryCountRef.current = 0
+          }
+      }
+    }
+
+    recognition.onend = () => {
+      // Only restart if we're still supposed to be recording and haven't exceeded retries
+      if (isRecordingRef.current && retryCountRef.current < maxRetries) {
+        try {
+          recognitionRef.current.start()
+        } catch (e) {
+          console.warn("Failed to restart recognition on end:", e)
+          setVoiceError("Voice input stopped unexpectedly.")
+          setIsRecording(false)
+          isRecordingRef.current = false
+        }
+      } else if (isRecordingRef.current) {
+        // We've exceeded retries, stop recording
+        setVoiceError("Voice input stopped after multiple attempts.")
+        setIsRecording(false)
+        isRecordingRef.current = false
+        retryCountRef.current = 0
+      }
+    }
+
+    recognitionRef.current = recognition
+
+    return () => {
+      recognition.stop()
+    }
+  }, [])
+
+  const openCamera = useCallback(async (deviceId?: string) => {
     try {
       setCameraError(null)
+      const targetDeviceId = deviceId ?? selectedDeviceId
       const constraints: MediaStreamConstraints = {
         video: {
           width: 320,
           height: 240,
-          deviceId: selectedDeviceId ? { exact: selectedDeviceId } : undefined
+          deviceId: targetDeviceId ? { exact: targetDeviceId } : undefined
         },
         audio: false
       }
@@ -109,35 +258,74 @@ export function InterviewView() {
     }
   }, [selectedDeviceId])
 
+  const startCamera = useCallback(async () => {
+    await openCamera()
+  }, [openCamera])
+
+  const stopCamera = useCallback(() => {
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach(track => track.stop())
+      streamRef.current = null
+    }
+    if (videoRef.current) {
+      videoRef.current.srcObject = null
+    }
+    setIsCameraOn(false)
+  }, [])
+
   const switchCamera = useCallback(async (deviceId: string) => {
     setSelectedDeviceId(deviceId)
     if (isCameraOn) {
-      // Stop current stream and restart with new device
       stopCamera()
-      setTimeout(() => {
-        const constraints: MediaStreamConstraints = {
-          video: {
-            width: 320,
-            height: 240,
-            deviceId: { exact: deviceId }
-          },
-          audio: false
-        }
-        navigator.mediaDevices.getUserMedia(constraints)
-          .then(stream => {
-            streamRef.current = stream
-            if (videoRef.current) {
-              videoRef.current.srcObject = stream
-            }
-            setIsCameraOn(true)
-          })
-          .catch(err => {
-            console.error("Error switching camera:", err)
-            setCameraError("Failed to switch camera")
-          })
-      }, 100)
+      await openCamera(deviceId)
     }
-  }, [isCameraOn, stopCamera])
+  }, [isCameraOn, stopCamera, openCamera])
+
+  const cycleCamera = useCallback(async () => {
+    if (cameraDevices.length < 2) return
+    const currentIndex = cameraDevices.findIndex(device => device.deviceId === selectedDeviceId)
+    const nextIndex = currentIndex === -1 ? 0 : (currentIndex + 1) % cameraDevices.length
+    await switchCamera(cameraDevices[nextIndex].deviceId)
+  }, [cameraDevices, selectedDeviceId, switchCamera])
+
+  const startVoiceInput = useCallback(() => {
+    if (!recognitionRef.current || isRecording || isStartingRef.current) return
+
+    isStartingRef.current = true
+    try {
+      setVoiceError(null)
+      retryCountRef.current = 0
+      recognitionRef.current.start()
+      isRecordingRef.current = true
+      setIsRecording(true)
+    } catch (err) {
+      console.warn("Voice input start error:", err)
+      // If it's already started, just update the state
+      if (err.message && err.message.includes('already started')) {
+        isRecordingRef.current = true
+        setIsRecording(true)
+        setVoiceError(null)
+      } else {
+        setVoiceError("Failed to start voice input. Please try again.")
+      }
+    } finally {
+      isStartingRef.current = false
+    }
+  }, [isRecording])
+
+  const stopVoiceInput = useCallback(() => {
+    if (!recognitionRef.current) return
+    try {
+      recognitionRef.current.stop()
+    } catch (err) {
+      console.warn("Voice input stop error:", err)
+    }
+    isRecordingRef.current = false
+    setIsRecording(false)
+    setVoiceError(null)
+    retryCountRef.current = 0
+    isStartingRef.current = false
+  }, [])
 
   // Get camera devices on mount
   useEffect(() => {
@@ -341,8 +529,17 @@ export function InterviewView() {
               {currentApplication.job.title} at {currentApplication.job.company}
             </p>
           </div>
-          {/* Mobile Camera Button */}
+          {/* Mobile Camera Controls */}
           <div className="lg:hidden flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={cycleCamera}
+              disabled={cameraDevices.length < 2}
+              className="px-2"
+            >
+              Switch
+            </Button>
             {cameraDevices.length > 1 && (
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
@@ -390,18 +587,29 @@ export function InterviewView() {
                   <Camera className="h-4 w-4 text-primary" />
                   Camera Feed
                 </CardTitle>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={isCameraOn ? stopCamera : startCamera}
-                  className="h-8 px-2"
-                >
-                  {isCameraOn ? (
-                    <CameraOff className="h-3 w-3" />
-                  ) : (
-                    <Camera className="h-3 w-3" />
-                  )}
-                </Button>
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={cycleCamera}
+                    disabled={cameraDevices.length < 2}
+                    className="h-8 px-2"
+                  >
+                    Switch
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={isCameraOn ? stopCamera : startCamera}
+                    className="h-8 px-2"
+                  >
+                    {isCameraOn ? (
+                      <CameraOff className="h-3 w-3" />
+                    ) : (
+                      <Camera className="h-3 w-3" />
+                    )}
+                  </Button>
+                </div>
               </div>
             </CardHeader>
             <CardContent>
@@ -572,28 +780,57 @@ export function InterviewView() {
                 </Card>
               </div>
             ) : (
-              <form onSubmit={handleSubmit} className="max-w-2xl mx-auto flex gap-3">
-                <Input
-                  ref={inputRef}
-                  value={input}
-                  onChange={(e) => setInput(e.target.value)}
-                  placeholder={isLoading ? "AI is thinking..." : "Type your answer..."}
-                  disabled={isLoading}
-                  className="flex-1"
-                />
-                <Button 
-                  type="button" 
-                  variant="outline" 
-                  size="icon"
-                  onClick={stopSpeech}
-                  title="Stop audio playback"
-                >
-                  <Volume2 className="h-4 w-4" />
-                </Button>
-                <Button type="submit" disabled={isLoading || !input.trim()}>
-                  <Send className="h-4 w-4" />
-                </Button>
-              </form>
+              <>
+                <form onSubmit={handleSubmit} className="max-w-2xl mx-auto flex gap-3">
+                  <Input
+                    ref={inputRef}
+                    value={input}
+                    onChange={(e) => setInput(e.target.value)}
+                    placeholder={isLoading ? "AI is thinking..." : voiceSupported ? "Type your answer or use voice input..." : "Type your answer..."}
+                    disabled={isLoading}
+                    className="flex-1"
+                  />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="icon"
+                    onClick={isRecording ? stopVoiceInput : startVoiceInput}
+                    title={isRecording ? "Stop voice input" : voiceSupported ? "Start voice input" : "Voice input not supported"}
+                    disabled={!voiceSupported}
+                    className={isRecording ? "bg-emerald-500/10 border-emerald-500/30" : ""}
+                  >
+                    {isRecording ? (
+                      <MicOff className="h-4 w-4 text-emerald-600" />
+                    ) : (
+                      <Mic className="h-4 w-4" />
+                    )}
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="icon"
+                    onClick={stopSpeech}
+                    title="Stop audio playback"
+                  >
+                    <Volume2 className="h-4 w-4" />
+                  </Button>
+                  <Button type="submit" disabled={isLoading || !input.trim()}>
+                    <Send className="h-4 w-4" />
+                  </Button>
+                </form>
+                {isRecording && (
+                  <div className="mt-2 flex items-center gap-2 text-xs text-foreground/80">
+                    <span className="inline-flex h-2.5 w-2.5 rounded-full bg-emerald-500 animate-pulse shadow-[0_0_0_8px_rgba(52,211,153,0.15)]" />
+                    <span>Listening... speak now</span>
+                  </div>
+                )}
+                {voiceError && (
+                  <div className="mt-2 flex items-center gap-2 text-xs text-destructive">
+                    <span className="inline-flex h-2.5 w-2.5 rounded-full bg-destructive" />
+                    <span>{voiceError}</span>
+                  </div>
+                )}
+              </>
             )}
           </div>
         </div>
