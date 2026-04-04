@@ -11,20 +11,20 @@ const MAX_BODY_SIZE = 10 * 1024
 // Demo responses for help center
 const demoResponses: Record<string, string> = {
   apply:
-    "To apply for a job on Haveloc:\n\n1. Browse the job listings on the home page\n2. Click the \"Apply\" button on any job that interests you\n3. Fill in your credentials and upload your resume\n4. Schedule your interview date and time\n5. Submit your application!\n\nOnce submitted, you can find your application in \"Applied Interviews\" from the menu.",
+    "I'd be happy to walk you through applying for a job on Haveloc!\n\nHere's how it works:\n\n1. Start by browsing our job listings on the home page\n2. When you find something that interests you, click the \"Apply\" button\n3. Fill in your credentials and upload your resume (this is required)\n4. Choose your preferred interview date and time\n5. Submit your application!\n\nOnce submitted, you can track your application in \"Applied Interviews\" from the menu. I'm here if you have any questions along the way!",
   interview:
-    "The Haveloc interview process is simple:\n\n1. After applying, go to \"Applied Interviews\" from the menu\n2. Click \"Take Interview\" when you're ready\n3. Our AI interviewer will ask you questions based on:\n   - The job requirements\n   - Your profile and experience\n   - Your previous answers\n4. Answer naturally and professionally\n5. The interview concludes with a thank you message\n\nGood luck!",
+    "I'm excited to help you understand our interview process - it's designed to be as smooth as possible!\n\nHere's what happens after you apply:\n\n1. Head to \"Applied Interviews\" in the menu\n2. Click \"Take Interview\" when you're ready\n3. Our AI interviewer (who acts as a senior HR professional) will ask you thoughtful questions about:\n   - The specific job requirements\n   - Your background and experience\n   - Your previous answers\n4. Just answer naturally and professionally\n5. The interview wraps up with a friendly thank you\n\nYou'll do great! Feel free to ask me anything else about the process.",
   profile:
-    "To update your profile:\n\n1. Click the menu icon in the top right\n2. Select \"My Profile\"\n3. Click \"Edit Profile\" button\n4. Update your information (name, email, skills, experience, education)\n5. Click \"Save\" when done\n\nYour profile information is used to personalize interview questions!",
+    "Updating your profile is straightforward, and it's so important for personalized interviews!\n\nHere's how to do it:\n\n1. Click the menu icon in the top right corner\n2. Select \"My Profile\" from the dropdown\n3. Click the \"Edit Profile\" button\n4. Update your information - name, email, skills, experience, education\n5. Don't forget to click \"Save\" when you're done\n\nYour profile helps our AI interviewer ask more relevant questions. I'm here if you need help with any of these steps!",
   support:
-    "For support, you can:\n\n1. Email us at support@haveloc.com\n2. Use this Help Center chatbot for common questions\n3. Check our FAQ section\n\nWe typically respond within 24 hours. Thanks for using Haveloc!",
+    "I'm sorry to hear you're having trouble - I want to make sure you get the help you need!\n\nHere are your support options:\n\n1. Email our team at support@haveloc.com (we usually respond within 24 hours)\n2. I'm right here in the Help Center for quick questions\n3. Check out our FAQ section for common answers\n\nThank you for using Haveloc - we truly appreciate your patience and feedback!",
   interested:
-    "To mark a job as interested:\n\n1. Browse jobs on the home page\n2. Click the \"Interested\" button on any job card\n3. The job will be saved to your \"Interested Interviews\" list\n4. Access saved jobs from the menu under \"Interested Interviews\"\n\nThis is a great way to save jobs you want to apply for later!",
+    "That's a smart way to keep track of opportunities! Here's how to mark jobs as interested:\n\n1. Browse the jobs on our home page\n2. Look for the \"Interested\" button on any job card that catches your eye\n3. Click it, and the job will be saved to your \"Interested Interviews\" list\n4. You can access all your saved jobs from the menu under \"Interested Interviews\"\n\nIt's a great way to bookmark jobs you want to apply for later. I hope you find some exciting opportunities!",
   domain:
-    "You can filter jobs by domain:\n\n1. On the home page, look for the domain filter dropdown\n2. Select a domain: Technology, Data Science, Finance, Healthcare, Marketing, or Environment\n3. Only jobs in that domain will be shown\n4. Select \"All Domains\" to see all available jobs\n\nThis helps you find opportunities in your field of interest!",
+    "Filtering by domain is such a helpful feature for finding the right opportunities!\n\nHere's how to use it:\n\n1. On the home page, you'll see a domain filter dropdown\n2. Choose from options like Technology, Data Science, Finance, Healthcare, Marketing, or Environment\n3. Only jobs in that domain will show up\n4. To see everything again, just select \"All Domains\"\n\nThis makes it so much easier to find opportunities in your field. What domain are you most interested in?",
   hello:
-    "Hello! Welcome to the Haveloc Help Center. I'm here to assist you with any questions about our AI interview platform.\n\nHere are some things I can help you with:\n- How to apply for jobs\n- Understanding the interview process\n- Updating your profile\n- Using the interested/saved jobs feature\n- Filtering jobs by domain\n\nWhat would you like to know?",
-  hi: "Hi there! Welcome to Haveloc Help Center. I'm happy to assist you!\n\nI can help you with:\n- Applying for jobs\n- Taking AI interviews\n- Managing your profile\n- Understanding platform features\n\nWhat can I help you with today?",
+    "Hello there! Welcome to the Haveloc Help Center. I'm delighted to assist you with any questions about our AI interview platform.\n\nI'm here to help with:\n- How to apply for jobs\n- Understanding the interview process\n- Updating your profile\n- Using the interested/saved jobs feature\n- Filtering jobs by domain\n\nWhat would you like to know? I'm all ears!",
+  hi: "Hi there! So glad you stopped by the Haveloc Help Center. I'm here and ready to help!\n\nI can assist you with:\n- Applying for jobs\n- Taking AI interviews\n- Managing your profile\n- Understanding our platform features\n\nWhat can I help you with today? I'm genuinely excited to support you!",
 }
 
 // Simple input sanitizer to prevent XSS
@@ -73,7 +73,7 @@ function getDemoResponse(message: string): string {
   }
 
   // Default response - generic to avoid info leakage
-  return "Thanks for your question! I can help you with:\n\n- How to apply for jobs\n- Understanding the interview process\n- Managing your profile\n- Saving jobs you're interested in\n\nWhat would you like to know?"
+  return "Thanks so much for reaching out! I'm here to help with anything Haveloc-related. I can assist you with:\n\n- How to apply for jobs\n- Understanding the interview process\n- Managing your profile\n- Saving jobs you're interested in\n\nWhat would you like to know? I'm genuinely excited to help you navigate our platform!"
 }
 
 export async function POST(req: Request) {
