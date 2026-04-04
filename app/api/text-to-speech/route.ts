@@ -17,7 +17,7 @@ export async function POST(req: NextRequest) {
     const apiKey = process.env.ELEVENLABS_API_KEY
 
     if (!apiKey) {
-      console.warn("ElevenLabs API key not configured")
+      console.error("ElevenLabs API key not configured in environment")
       return NextResponse.json(
         { error: "Speech synthesis not available" },
         { status: 503 }
@@ -40,6 +40,9 @@ export async function POST(req: NextRequest) {
       )
     }
 
+    console.log("Requesting ElevenLabs API with voice:", voiceId)
+    console.log("Text length:", cleanText.length)
+
     const response = await fetch(
       `https://api.elevenlabs.io/v1/text-to-speech/${voiceId}`,
       {
@@ -50,7 +53,7 @@ export async function POST(req: NextRequest) {
         },
         body: JSON.stringify({
           text: cleanText,
-          model_id: "eleven_monolingual_v1",
+          model_id: "eleven_multilingual_v2",
           voice_settings: {
             stability: 0.5,
             similarity_boost: 0.75,
@@ -60,14 +63,17 @@ export async function POST(req: NextRequest) {
     )
 
     if (!response.ok) {
-      const errorData = await response.json().catch(() => ({ error: "Unknown error" }))
-      throw new Error(
-        `ElevenLabs API error: ${response.status} - ${
-          errorData.detail?.message ||
-          errorData.error ||
-          "Failed to generate speech"
-        }`
-      )
+      let errorMessage = "Failed to generate speech"
+      try {
+        const errorData = await response.json()
+        console.error("ElevenLabs API error response:", errorData)
+        errorMessage = errorData.detail?.message || errorData.error || errorMessage
+      } catch (e) {
+        const errorText = await response.text()
+        console.error("ElevenLabs API error text:", errorText)
+        errorMessage = errorText || errorMessage
+      }
+      throw new Error(`ElevenLabs API error: ${response.status} - ${errorMessage}`)
     }
 
     // Get audio as buffer
@@ -83,8 +89,9 @@ export async function POST(req: NextRequest) {
     })
   } catch (error) {
     console.error("Text-to-speech API error:", error)
+    const message = error instanceof Error ? error.message : "Failed to generate speech"
     return NextResponse.json(
-      { error: "Failed to generate speech" },
+      { error: message },
       { status: 500 }
     )
   }
