@@ -17,6 +17,8 @@ import {
   CheckCircle2,
   AlertCircle,
   Volume2,
+  Camera,
+  CameraOff,
 } from "lucide-react"
 import { Spinner } from "@/components/ui/spinner"
 
@@ -38,6 +40,10 @@ export function InterviewView() {
   const hasStarted = useRef(false)
   const inputRef = useRef<HTMLInputElement>(null)
   const hasCompletedInterview = useRef(false)
+  const videoRef = useRef<HTMLVideoElement>(null)
+  const streamRef = useRef<MediaStream | null>(null)
+  const [isCameraOn, setIsCameraOn] = useState(false)
+  const [cameraError, setCameraError] = useState<string | null>(null)
 
   // Store context
   const contextRef = useRef({
@@ -49,6 +55,44 @@ export function InterviewView() {
     candidateName: user?.name || "",
     candidateEmail: user?.email || "",
   })
+
+  // Webcam functions
+  const startCamera = useCallback(async () => {
+    try {
+      setCameraError(null)
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { width: 320, height: 240 },
+        audio: false
+      })
+      streamRef.current = stream
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream
+      }
+      setIsCameraOn(true)
+    } catch (err: any) {
+      console.error("Camera error:", err)
+      setCameraError(err.message || "Failed to access camera")
+    }
+  }, [])
+
+  const stopCamera = useCallback(() => {
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach(track => track.stop())
+      streamRef.current = null
+    }
+    if (videoRef.current) {
+      videoRef.current.srcObject = null
+    }
+    setIsCameraOn(false)
+    setCameraError(null)
+  }, [])
+
+  // Cleanup camera on unmount
+  useEffect(() => {
+    return () => {
+      stopCamera()
+    }
+  }, [stopCamera])
 
   // Update context when data changes
   useEffect(() => {
@@ -233,15 +277,83 @@ export function InterviewView() {
     <div className="h-[calc(100vh-5rem)] flex flex-col">
       {/* Header */}
       <div className="text-center py-4 border-b border-border bg-gradient-to-r from-primary/5 via-background to-secondary/5 shrink-0">
-        <h1 className="text-2xl font-bold text-foreground">Interview</h1>
-        <p className="text-sm text-muted-foreground mt-1">
-          {currentApplication.job.title} at {currentApplication.job.company}
-        </p>
+        <div className="flex items-center justify-between px-4">
+          <div className="flex-1">
+            <h1 className="text-2xl font-bold text-foreground">Interview</h1>
+            <p className="text-sm text-muted-foreground mt-1">
+              {currentApplication.job.title} at {currentApplication.job.company}
+            </p>
+          </div>
+          {/* Mobile Camera Button */}
+          <div className="lg:hidden">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={isCameraOn ? stopCamera : startCamera}
+              className={`ml-4 ${isCameraOn ? 'bg-red-500/10 border-red-500/30' : ''}`}
+            >
+              {isCameraOn ? (
+                <CameraOff className="h-4 w-4" />
+              ) : (
+                <Camera className="h-4 w-4" />
+              )}
+            </Button>
+          </div>
+        </div>
       </div>
 
       <div className="flex-1 flex overflow-hidden">
         {/* Left Sidebar - Job Details & Credentials */}
         <div className="hidden lg:flex w-80 flex-col border-r border-border bg-muted/30 p-4 gap-4 overflow-y-auto">
+          {/* Webcam Section */}
+          <Card className="bg-card shrink-0">
+            <CardHeader className="pb-2">
+              <div className="flex items-center justify-between">
+                <CardTitle className="text-sm font-medium flex items-center gap-2">
+                  <Camera className="h-4 w-4 text-primary" />
+                  Camera Feed
+                </CardTitle>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={isCameraOn ? stopCamera : startCamera}
+                  className="h-8 px-2"
+                >
+                  {isCameraOn ? (
+                    <CameraOff className="h-3 w-3" />
+                  ) : (
+                    <Camera className="h-3 w-3" />
+                  )}
+                </Button>
+              </div>
+            </CardHeader>
+            <CardContent>
+              <div className="aspect-video bg-muted rounded-lg overflow-hidden mb-2">
+                <video
+                  ref={videoRef}
+                  autoPlay
+                  playsInline
+                  muted
+                  className={`w-full h-full object-cover ${isCameraOn ? 'block' : 'hidden'}`}
+                />
+                {!isCameraOn && (
+                  <div className="w-full h-full flex items-center justify-center text-muted-foreground">
+                    <div className="text-center">
+                      <Camera className="h-8 w-8 mx-auto mb-2 opacity-50" />
+                      <p className="text-xs">Camera is off</p>
+                    </div>
+                  </div>
+                )}
+              </div>
+              {cameraError && (
+                <p className="text-xs text-destructive">{cameraError}</p>
+              )}
+              <p className="text-xs text-muted-foreground">
+                {isCameraOn ? "Camera is active" : "Click the camera button to start your video feed"}
+              </p>
+            </CardContent>
+          </Card>
+
           <Card className="bg-card shrink-0">
             <CardHeader className="pb-2">
               <CardTitle className="text-sm font-medium flex items-center gap-2">
