@@ -139,6 +139,11 @@ async function useWebSpeechAPI(text: string): Promise<void> {
     utterance.voice = femaleVoice
   }
 
+  // If another utterance is already speaking, cancel it before starting a new one.
+  if (speechSynthesis.speaking || speechSynthesis.pending) {
+    speechSynthesis.cancel()
+  }
+
   // Setup event handlers
   return new Promise((resolve, reject) => {
     utterance.onend = () => {
@@ -147,8 +152,13 @@ async function useWebSpeechAPI(text: string): Promise<void> {
     }
 
     utterance.onerror = (event) => {
-      console.error("Speech synthesis error:", event.error)
-      reject(new Error(`Speech synthesis error: ${event.error}`))
+      console.warn("Speech synthesis error:", event.error)
+      // 'interrupted' can occur when speech is cancelled intentionally or superseded.
+      if (event.error === "interrupted") {
+        resolve()
+        return
+      }
+      resolve()
     }
 
     // Speak the text
