@@ -35,7 +35,9 @@ export function JobCard({ job }: JobCardProps) {
           </div>
           <Badge
             variant="secondary"
-            className="bg-secondary/20 text-secondary-foreground border-secondary/30"
+            className={
+              `bg-secondary/20 ${job.type === "Full-time" || job.type === "Internship" ? "text-black" : "text-secondary-foreground"} border-secondary/30`
+            }
           >
             {job.type}
           </Badge>
