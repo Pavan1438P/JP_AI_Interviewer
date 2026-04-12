@@ -378,8 +378,9 @@ export function InterviewView() {
         setIsCompleted(true)
         hasCompletedInterview.current = true
         // Automatically complete the interview when AI indicates completion
+        // Pass messages so they get saved to the database for admin review
         if (currentApplication) {
-          completeInterview(currentApplication.id)
+          completeInterview(currentApplication.id, messages)
         }
       }
     }

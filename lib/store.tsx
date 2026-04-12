@@ -71,7 +71,7 @@ interface AppContextType extends AppState {
   submitApplication: (data: { resume: string | null; credentials: string; scheduledDate: string; scheduledTime: string }) => Promise<void>
   setSelectedJob: (job: JobListing | null) => void
   startInterview: (application: Application) => void
-  completeInterview: (applicationId: string) => Promise<void>
+  completeInterview: (applicationId: string, messages?: { role: string; content: string }[]) => Promise<void>
   updateUser: (user: Partial<User>) => Promise<void>
   clearLogoutMessage: () => void
   markNotificationAsRead: (notificationId: string) => Promise<void>
@@ -393,7 +393,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }))
   }
 
-  const completeInterview = async (applicationId: string) => {
+  const completeInterview = async (applicationId: string, messages?: { role: string; content: string }[]) => {
     const { data: { session } } = await supabase.auth.getSession()
     if (!session?.user) return
 
@@ -402,6 +402,20 @@ export function AppProvider({ children }: { children: ReactNode }) {
       .update({ status: "completed" })
       .eq("id", applicationId)
       .eq("user_id", session.user.id)
+
+    // Save interview messages to database for admin review
+    if (messages && messages.length > 0) {
+      const messagesToInsert = messages
+        .filter(m => m.content && m.content !== "START_INTERVIEW_GREETING")
+        .map(m => ({
+          application_id: applicationId,
+          role: m.role,
+          content: m.content,
+        }))
+      if (messagesToInsert.length > 0) {
+        await supabase.from("interview_messages").insert(messagesToInsert)
+      }
+    }
 
     // Add notification
     await supabase.from("notifications").insert({

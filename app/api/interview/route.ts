@@ -2,6 +2,15 @@ import { UIMessage } from "ai"
 import { createClient } from "@/lib/supabase/server"
 import { checkRateLimit, getRateLimitHeaders } from "@/lib/rate-limit"
 import { GoogleGenerativeAI } from "@google/generative-ai"
+import {
+  type InterviewContext,
+  getDefaultContext,
+  getSystemPrompt,
+  getGreetingPrompt,
+  getFollowUpPrompt,
+  extractCoveredTopics,
+  buildSinglePrompt,
+} from "@/lib/prompts"
 
 export const maxDuration = 60
 export const dynamic = "force-dynamic"
@@ -9,16 +18,6 @@ export const dynamic = "force-dynamic"
 // Maximum request body size (50KB)
 const MAX_BODY_SIZE = 50 * 1024
 const MAX_MESSAGES = 20
-
-interface InterviewContext {
-  jobTitle: string
-  jobDescription: string
-  jobRequirements: string[]
-  company: string
-  candidateCredentials: string
-  candidateName: string
-  candidateEmail: string
-}
 
 // Initialize Gemini
 const genAI = new GoogleGenerativeAI(process.env.GOOGLE_API_KEY || "")
@@ -159,7 +158,7 @@ export async function POST(req: Request) {
   // Check for gibberish text from user (skip for greeting)
     const lastUserMessage = messages[messages.length - 1]
     const userText = lastUserMessage?.role === "user" 
-      ? (lastUserMessage.parts || []).filter((p: any) => p.type === "text").map((p: any) => p.text).join("")
+      ? getMessageText(lastUserMessage)
       : ""
     
     const isGreeting = userText === "START_INTERVIEW_GREETING"
@@ -262,108 +261,14 @@ export async function POST(req: Request) {
   }
 }
 
-function getDefaultContext(): InterviewContext {
-  return {
-    jobTitle: "Software Developer",
-    jobDescription: "A software development position",
-    jobRequirements: ["Programming", "Problem Solving"],
-    company: "the company",
-    candidateCredentials: "Not provided",
-    candidateName: "Candidate",
-    candidateEmail: "",
-  }
+// --- Helper: extract text from UIMessage ---
+function getMessageText(m: UIMessage): string {
+  return (m.parts || []).filter((p: any) => p.type === "text").map((p: any) => p.text).join("")
 }
 
-function getInterviewPrompt(context: InterviewContext, messages: UIMessage[]): string {
-  const lastMessage = messages[messages.length - 1]
-  const userResponse = lastMessage?.role === "user" 
-    ? (lastMessage.parts || []).filter((p: any) => p.type === "text").map((p: any) => p.text).join("")
-    : ""
-  
-  // Check if this is the greeting or first real message
-  const isGreeting = userResponse === "START_INTERVIEW_GREETING"
-  const userMessages = messages.filter(m => m.role === "user" && 
-    (m.parts || []).filter((p: any) => p.type === "text").map((p: any) => p.text).join("") !== "START_INTERVIEW_GREETING")
-  const isFirstRealMessage = userMessages.length === 1 && userMessages[0] === lastMessage
-  
-  const conversationHistory = messages
-    .filter((m: UIMessage) => m.role !== "system")
-    .slice(-6) // Keep last 6 messages for context
-    .map((m: UIMessage) => {
-      const text = (m.parts || []).filter((p: any) => p.type === "text").map((p: any) => p.text).join("")
-      return `${m.role}: ${text}`
-    })
-    .join("\n")
-
-  if (isGreeting || isFirstRealMessage) {
-    return `You are "Haveloc", an expert, empathetic AI Technical Recruiter conducting an initial screening interview.
-
-CONTEXT:
-You will be provided with the Candidate's Resume or Candidate Details, the target Job Description, and the ongoing conversation history.
-
-PRIMARY APPROACH: Let the AI model generate natural, relevant questions based on the job requirements and candidate's background. Only use basic generic questions as a secondary fallback when you absolutely cannot generate relevant ones from the specific job and candidate details.
-
-GUIDELINES:
-1. ROLE ADAPTATION: Adapt your questions to the specific Job Description - a Data Science interview should sound different from a UI/UX Design interview.
-2. NATURAL QUESTIONS FIRST: Start with questions that naturally arise from analyzing the job requirements and candidate's resume/projects.
-3. CONVERSATION FLOW: Ask follow-up questions that build naturally on what the candidate says.
-4. FORMAT: Ask ONLY ONE question at a time. Keep responses conversational and human-like (2-3 sentences max).
-
-Job Details:
-- Position: ${context.jobTitle}
-- Description: ${context.jobDescription}
-- Requirements: ${context.jobRequirements.join(", ")}
-
-Candidate:
-- Name: ${context.candidateName}
-- Email: ${context.candidateEmail}
-- Credentials/Resume: ${context.candidateCredentials}
-
-Your task: Give a warm, professional greeting to ${context.candidateName}. Introduce yourself as Haveloc, the AI Technical Recruiter, mention the position they're applying for, and ask an opening question that welcomes them and connects to the job requirements.`
-  }
-
-  return `You are "Haveloc", an expert, empathetic AI Technical Recruiter conducting an initial screening interview.
-
-CONTEXT:
-You will be provided with the Candidate's Resume or Canditate Details, the target Job Description, and the ongoing conversation history.
-
-CRITICAL INSTRUCTIONS - READ CAREFULLY:
-1. ROLE ADAPTATION: Completely adapt your persona and questions to the specific Job Description. A Data Science interview should sound entirely different from a UI/UX Design interview.
-2. HIGH VARIANCE (NO STOCK QUESTIONS): NEVER ask generic HR questions like "Tell me about yourself", "What are your strengths?", or "Why do you want this job?".
-3. SCENARIO-BASED ONLY: Formulate highly specific, scenario-based questions by cross-referencing the required skills in the Job Description with the past projects listed on their Resume.
-4. STRICT NON-REPETITION: Before asking a question, silently analyze the conversation history. NEVER ask about a skill, project, or topic that has already been covered. If you just asked about React, your next question must pivot to a completely different requirement (like testing, deployment, or soft skills).
-5. RANDOMIZED ANGLES: To ensure no two interviews are the same, randomly vary your angle of questioning. Pick a random detail from their resume that matches the job and drill into it.
-6. DYNAMIC FOLLOW-UPS: If the candidate's answer is shallow, do not move on. Your next question MUST challenge them to dive deeper into the technical specifics or architecture of the answer they just gave.
-7. FORMAT: Ask ONLY ONE question at a time. Keep your response conversational, human-like, and concise (maximum 2-3 sentences) so it sounds natural when spoken aloud via Text-to-Speech. Do not use markdown formatting, asterisks, or bullet points.
-
-Job Details:
-- Position: ${context.jobTitle}
-- Description: ${context.jobDescription}
-- Requirements: ${context.jobRequirements.join(", ")}
-
-Candidate Profile:
-- Name: ${context.candidateName}
-- Credentials/Resume: ${context.candidateCredentials}
-
-Full Conversation History:
-${conversationHistory}
-
-Candidate's LAST response: "${userResponse}"
-
-YOUR TASK:
-Analyze the candidate's last response carefully. Then:
-
-1. If this is their first real answer (not the greeting trigger), acknowledge something specific they mentioned and show genuine interest
-2. Ask a follow-up question that directly relates to what they just told you, connecting it to the job requirements when possible
-3. Show genuine curiosity - ask for details, examples, or clarification with human-like enthusiasm
-4. Vary your questioning style and topics for each interview - never ask the same questions even for repeat candidates
-
-EXAMPLES of good follow-ups:
-- If they mention a skill: "That's impressive! Can you walk me through a specific example of how you've applied ${skill} in a project, and how that relates to what we'd need here?"
-- If they talk about experience: "That sounds like valuable experience. What was the most challenging aspect you faced, and how did you overcome it?"
-- If they mention a project: "I'd love to hear more about your role in that project. What was your specific contribution, and what did you learn from it?"
-- If they give a vague answer: "I appreciate you sharing that. Could you give me a concrete example? I'm really interested in understanding your approach."
-- If they mention something unrelated: "That's fascinating! How do you think that experience would translate to the ${context.jobTitle} role we're discussing?"`
+// --- Helper: convert UIMessages to simple {role, text} array ---
+function toSimpleMessages(messages: UIMessage[]): { role: string; text: string }[] {
+  return messages.map((m) => ({ role: m.role, text: getMessageText(m) }))
 }
 
 function fallbackResponse(
@@ -371,65 +276,32 @@ function fallbackResponse(
   context: InterviewContext,
   rateLimitHeaders: Record<string, string>
 ): Response {
+  const simpleMessages = toSimpleMessages(messages)
   const isFirstMessage = messages.length <= 1
   let response: string
 
   if (isFirstMessage) {
-    response = `Hello ${context.candidateName}! I'm delighted to meet you today. As a senior HR professional at ${context.company} with over 15 years of experience, I'm truly excited to learn more about you and your fit for our ${context.jobTitle} position.\n\nTo get us started, could you tell me a bit about yourself and what particularly drew you to apply for this role?`
+    // Greeting that references the actual job
+    response = `Hello ${context.candidateName}! I'm Haveloc, the AI interviewer here at ${context.company}. I'm excited to chat with you about the ${context.jobTitle} position today. To kick things off, I noticed the role requires ${context.jobRequirements[0] || "some key skills"}. Can you tell me about a recent project where you worked with that?`
   } else {
-    // Get the user's last actual response (not the greeting trigger)
-    const userMessages = messages.filter((m) => m.role === "user" && 
-      (m.parts || []).filter((p: any) => p.type === "text").map((p: any) => p.text).join("") !== "START_INTERVIEW_GREETING")
-    const lastUserAnswer = userMessages.length > 0 ? 
-      (userMessages[userMessages.length - 1].parts || []).filter((p: any) => p.type === "text").map((p: any) => p.text).join("") : ""
-    const previousAnswers = userMessages.map(m => 
-      (m.parts || []).filter((p: any) => p.type === "text").map((p: any) => p.text).join("")
-    ).join(" ")
-    
-    // Extract potential skills/experience mentioned by candidate
-    const commonSkills = [
-      "javascript", "typescript", "python", "java", "react", "angular", "vue", "node", 
-      "aws", "azure", "gcp", "docker", "kubernetes", "sql", "nosql", "mongodb", "postgres",
-      "machine learning", "ai", "data science", "analytics", "leadership", "management",
-      "agile", "scrum", "git", "ci/cd", "testing", "automation", "cloud", "devops"
-    ]
-    
-    const mentionedSkills = commonSkills.filter(skill => 
-      previousAnswers.toLowerCase().includes(skill.toLowerCase())
+    const userMessages = simpleMessages.filter(
+      (m) => m.role === "user" && m.text !== "START_INTERVIEW_GREETING"
     )
-    
+    const lastAnswer = userMessages[userMessages.length - 1]?.text || ""
     const questionCount = userMessages.length
-    
-    // Generate context-aware fallback question
-    if (lastUserAnswer.length < 10) {
-      // Very short answer
-      response = `I appreciate you sharing that, but I'd love to hear a bit more detail. Could you elaborate on your experience? I'm genuinely interested in understanding your background better.`
-    } else if (mentionedSkills.length > 0 && questionCount <= 3) {
-      // They mentioned specific skills - ask about one
-      const skill = mentionedSkills[0]
-      response = `That's impressive that you mentioned ${skill}! Can you walk me through a specific project where you applied this skill and tell me about the impact it had?`
-    } else if (previousAnswers.toLowerCase().includes("project") && questionCount <= 4) {
-      // They mentioned a project
-      response = `Projects like that are so valuable to hear about. What was your specific role in that project, and what was the most challenging part you encountered?`
-    } else if (previousAnswers.toLowerCase().includes("team") || previousAnswers.toLowerCase().includes("lead")) {
-      // Leadership/team related
-      response = `Team dynamics are so important in our work. Can you share a situation where you had to navigate a team challenge or motivate your colleagues?`
-    } else if (questionCount === 1) {
-      response = `That's a wonderful introduction! I'm curious - can you tell me about a specific accomplishment in your career that you're particularly proud of?`
-    } else if (questionCount === 2) {
-      response = `How fascinating! In our fast-paced industry, staying current is key. How do you keep up with new trends and continue developing your skills?`
-    } else if (questionCount === 3) {
-      // Connect to job requirements if available
-      const requirement = context.jobRequirements[0] || "this role"
-      response = `Given your background and what we're looking for in ${requirement}, how do you see yourself contributing to our team and making an impact?`
-    } else if (questionCount === 4) {
-      response = `Every role has its challenges. Can you describe a difficult situation at work and walk me through how you approached solving it?`
-    } else if (questionCount >= 5) {
-      // End interview after 5+ questions
-      response = `Thank you so much for your time today, ${context.candidateName}! It's been a pleasure speaking with you. This concludes our interview, and we'll be in touch soon regarding next steps. [INTERVIEW_COMPLETE]`
+    const coveredTopics = extractCoveredTopics(simpleMessages, context.jobRequirements)
+    const uncoveredReqs = context.jobRequirements.filter(
+      (req) => !coveredTopics.some((t) => t.toLowerCase().includes(req.toLowerCase()))
+    )
+
+    if (questionCount >= 6 || uncoveredReqs.length === 0) {
+      response = `Thank you so much for your time today, ${context.candidateName}! It's been a great conversation. I've really enjoyed learning about your experience. We'll review everything and be in touch soon. [INTERVIEW_COMPLETE]`
+    } else if (lastAnswer.length < 15) {
+      response = `I'd love to hear more detail on that. Could you walk me through a specific example or situation? I'm really interested in understanding your hands-on experience.`
     } else {
-      // Generic but attempts to acknowledge previous answer
-      response = `Thanks for sharing that insight. Based on what you've told me, could you dive deeper into your technical approach and decision-making process? I'm really interested in your methodology.`
+      // Pick the next uncovered requirement
+      const nextReq = uncoveredReqs[0] || context.jobRequirements[0]
+      response = `That's a solid answer, thank you. Let me shift gears a bit. The ${context.jobTitle} role also requires ${nextReq}. Can you share a specific example of how you've applied that in a real project or work setting?`
     }
   }
 
@@ -459,10 +331,49 @@ function fallbackResponse(
   })
 }
 
-// Generate response using Claude API
+// Generate response using Claude API with multi-turn conversation
 async function generateClaudeResponse(context: InterviewContext, messages: UIMessage[]): Promise<string> {
-  const prompt = getInterviewPrompt(context, messages)
-  
+  const simpleMessages = toSimpleMessages(messages)
+  const lastUserText = simpleMessages[simpleMessages.length - 1]?.text || ""
+  const isGreeting = lastUserText === "START_INTERVIEW_GREETING"
+
+  // Build Claude messages: system prompt as system, then full conversation history
+  const systemPrompt = getSystemPrompt(context)
+
+  // Convert conversation history to Claude message format (full history, not truncated)
+  const claudeMessages: { role: "user" | "assistant"; content: string }[] = []
+
+  if (isGreeting) {
+    claudeMessages.push({ role: "user", content: getGreetingPrompt(context) })
+  } else {
+    // Send the entire conversation as context, then the follow-up instruction
+    for (const msg of simpleMessages) {
+      if (msg.text === "START_INTERVIEW_GREETING") continue
+      const role = msg.role === "user" ? "user" as const : "assistant" as const
+      // Avoid consecutive same-role messages (Claude requirement)
+      if (claudeMessages.length > 0 && claudeMessages[claudeMessages.length - 1].role === role) {
+        claudeMessages[claudeMessages.length - 1].content += "\n" + msg.text
+      } else {
+        claudeMessages.push({ role, content: msg.text })
+      }
+    }
+
+    // Add the follow-up instruction as a final user message
+    const coveredTopics = extractCoveredTopics(simpleMessages, context.jobRequirements)
+    const conversationText = simpleMessages
+      .filter((m) => m.text !== "START_INTERVIEW_GREETING")
+      .map((m) => `${m.role === "user" ? "Candidate" : "Haveloc"}: ${m.text}`)
+      .join("\n")
+    const followUp = getFollowUpPrompt(context, conversationText, lastUserText, coveredTopics)
+
+    // Ensure the last message is from user (append instruction)
+    if (claudeMessages.length > 0 && claudeMessages[claudeMessages.length - 1].role === "user") {
+      claudeMessages[claudeMessages.length - 1].content += "\n\n[INTERVIEWER INSTRUCTION]: " + followUp
+    } else {
+      claudeMessages.push({ role: "user", content: "[INTERVIEWER INSTRUCTION]: " + followUp })
+    }
+  }
+
   const response = await fetch("https://api.anthropic.com/v1/messages", {
     method: "POST",
     headers: {
@@ -471,10 +382,11 @@ async function generateClaudeResponse(context: InterviewContext, messages: UIMes
       "anthropic-version": "2023-06-01",
     },
     body: JSON.stringify({
-      model: "claude-3-haiku-20240307",
+      model: "claude-sonnet-4-20250514",
       max_tokens: 500,
       temperature: 0.7,
-      messages: [{ role: "user", content: prompt }],
+      system: systemPrompt,
+      messages: claudeMessages,
     }),
   })
 
@@ -487,20 +399,65 @@ async function generateClaudeResponse(context: InterviewContext, messages: UIMes
   return data.content[0]?.text || "I'm sorry, I couldn't generate a response."
 }
 
-// Generate response using Gemini API
+// Generate response using Gemini API with multi-turn conversation
 async function generateGeminiResponse(context: InterviewContext, messages: UIMessage[]): Promise<string> {
-  const prompt = getInterviewPrompt(context, messages)
-  
-  const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" })
-  
-  const result = await model.generateContent({
-    contents: [{ role: "user", parts: [{ text: prompt }] }],
-    generationConfig: {
-      temperature: 0.7,
-      maxOutputTokens: 500,
-    },
+  const simpleMessages = toSimpleMessages(messages)
+  const lastUserText = simpleMessages[simpleMessages.length - 1]?.text || ""
+  const isGreeting = lastUserText === "START_INTERVIEW_GREETING"
+
+  // Use buildSinglePrompt which combines system + history + follow-up for Gemini
+  const prompt = buildSinglePrompt(context, simpleMessages, isGreeting)
+
+  const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" })
+
+  // Build multi-turn chat history for Gemini
+  const chatHistory: { role: "user" | "model"; parts: { text: string }[] }[] = []
+
+  if (!isGreeting) {
+    // Add system prompt as the first user message, with an ack from model
+    chatHistory.push({ role: "user", parts: [{ text: getSystemPrompt(context) }] })
+    chatHistory.push({ role: "model", parts: [{ text: "Understood. I am Haveloc and I will follow all the interview rules strictly." }] })
+
+    // Add full conversation history as chat turns
+    for (const msg of simpleMessages) {
+      if (msg.text === "START_INTERVIEW_GREETING") continue
+      const role = msg.role === "user" ? "user" as const : "model" as const
+      if (chatHistory.length > 0 && chatHistory[chatHistory.length - 1].role === role) {
+        chatHistory[chatHistory.length - 1].parts[0].text += "\n" + msg.text
+      } else {
+        chatHistory.push({ role, parts: [{ text: msg.text }] })
+      }
+    }
+  }
+
+  if (isGreeting) {
+    // Simple single-turn for greeting
+    const result = await model.generateContent({
+      contents: [{ role: "user", parts: [{ text: prompt }] }],
+      generationConfig: { temperature: 0.7, maxOutputTokens: 500 },
+    })
+    return result.response.text()
+  }
+
+  // Multi-turn chat for follow-ups
+  const chat = model.startChat({
+    history: chatHistory.slice(0, -1), // everything except the last user message
+    generationConfig: { temperature: 0.7, maxOutputTokens: 500 },
   })
 
+  // The last user message plus the follow-up instruction
+  const coveredTopics = extractCoveredTopics(simpleMessages, context.jobRequirements)
+  const conversationText = simpleMessages
+    .filter((m) => m.text !== "START_INTERVIEW_GREETING")
+    .map((m) => `${m.role === "user" ? "Candidate" : "Haveloc"}: ${m.text}`)
+    .join("\n")
+  const followUp = getFollowUpPrompt(context, conversationText, lastUserText, coveredTopics)
+
+  const lastUserChatMsg = chatHistory.length > 0 && chatHistory[chatHistory.length - 1].role === "user"
+    ? chatHistory[chatHistory.length - 1].parts[0].text
+    : lastUserText
+
+  const result = await chat.sendMessage(lastUserChatMsg + "\n\n[INTERVIEWER INSTRUCTION]: " + followUp)
   return result.response.text()
 }
 
