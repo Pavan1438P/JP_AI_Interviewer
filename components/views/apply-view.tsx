@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { Badge } from "@/components/ui/badge"
 import { FieldGroup, Field, FieldLabel } from "@/components/ui/field"
-import { ArrowLeft, Upload, Calendar, Clock, Building2, MapPin, FileText } from "lucide-react"
+import { ArrowLeft, Upload, Building2, MapPin, FileText } from "lucide-react"
 
 export function ApplyView() {
   const { selectedJob, submitApplication, setCurrentView, user } = useApp()
@@ -24,8 +24,7 @@ Education: ${user.education}`
   )
   const [resume, setResume] = useState<string | null>(null)
   const [resumeFileName, setResumeFileName] = useState("")
-  const [scheduledDate, setScheduledDate] = useState("")
-  const [scheduledTime, setScheduledTime] = useState("")
+  const [isSubmitting, setIsSubmitting] = useState(false)
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
@@ -39,18 +38,24 @@ Education: ${user.education}`
     }
   }
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!credentials || !scheduledDate || !scheduledTime || !resume) {
+    if (!credentials || !resume) {
       alert("Please fill in all required fields, including your resume.")
       return
     }
-    submitApplication({
-      credentials,
-      resume,
-      scheduledDate,
-      scheduledTime,
-    })
+    setIsSubmitting(true)
+    try {
+      await submitApplication({
+        credentials,
+        resume,
+      })
+    } catch (err) {
+      console.error("Error submitting application:", err)
+      alert("Failed to submit application. Please try again.")
+    } finally {
+      setIsSubmitting(false)
+    }
   }
 
   if (!selectedJob) {
@@ -63,11 +68,6 @@ Education: ${user.education}`
       </div>
     )
   }
-
-  // Get tomorrow's date for minimum date
-  const tomorrow = new Date()
-  tomorrow.setDate(tomorrow.getDate() + 1)
-  const minDate = tomorrow.toISOString().split("T")[0]
 
   return (
     <div className="max-w-3xl mx-auto space-y-6">
@@ -116,7 +116,7 @@ Education: ${user.education}`
           <CardHeader>
             <CardTitle className="text-lg">Your Application</CardTitle>
             <CardDescription>
-              Fill in your details and schedule your interview
+              Fill in your details to apply for this position
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -168,34 +168,6 @@ Education: ${user.education}`
                 )}
               </Field>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <Field>
-                  <FieldLabel className="flex items-center gap-2">
-                    <Calendar className="h-4 w-4" />
-                    Interview Date *
-                  </FieldLabel>
-                  <Input
-                    type="date"
-                    value={scheduledDate}
-                    onChange={(e) => setScheduledDate(e.target.value)}
-                    min={minDate}
-                    required
-                  />
-                </Field>
-
-                <Field>
-                  <FieldLabel className="flex items-center gap-2">
-                    <Clock className="h-4 w-4" />
-                    Interview Time *
-                  </FieldLabel>
-                  <Input
-                    type="time"
-                    value={scheduledTime}
-                    onChange={(e) => setScheduledTime(e.target.value)}
-                    required
-                  />
-                </Field>
-              </div>
             </FieldGroup>
 
             <div className="flex gap-3 mt-8">
@@ -210,9 +182,9 @@ Education: ${user.education}`
               <Button
                 type="submit"
                 className="flex-1 bg-primary hover:bg-primary/90"
-                disabled={!resume}
+                disabled={!resume || isSubmitting}
               >
-                Submit Application
+                {isSubmitting ? "Submitting..." : "Submit Application"}
               </Button>
             </div>
           </CardContent>

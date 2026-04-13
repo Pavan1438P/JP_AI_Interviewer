@@ -68,7 +68,7 @@ interface AppContextType extends AppState {
   addInterested: (job: JobListing) => Promise<void>
   removeInterested: (jobId: string) => Promise<void>
   applyToJob: (job: JobListing) => void
-  submitApplication: (data: { resume: string | null; credentials: string; scheduledDate: string; scheduledTime: string }) => Promise<void>
+  submitApplication: (data: { resume: string | null; credentials: string }) => Promise<void>
   setSelectedJob: (job: JobListing | null) => void
   startInterview: (application: Application) => void
   completeInterview: (applicationId: string, messages?: { role: string; content: string }[]) => Promise<void>
@@ -347,7 +347,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }))
   }
 
-  const submitApplication = async (data: { resume: string | null; credentials: string; scheduledDate: string; scheduledTime: string }) => {
+  const submitApplication = async (data: { resume: string | null; credentials: string }) => {
     const { data: { session } } = await supabase.auth.getSession()
     if (!session?.user || !state.selectedJob) return
 
@@ -356,8 +356,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
       job_id: state.selectedJob.id,
       resume_url: data.resume,
       credentials: data.credentials,
-      scheduled_date: data.scheduledDate,
-      scheduled_time: data.scheduledTime,
       status: "pending",
     })
 
